@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Xadrez Básico</title>
+<style>
+  body {
+    display: flex;
+    justify-content: center;
+    padding: 20px;
+    background: #f0d9b5;
+  }
+  #chessboard {
+    display: grid;
+    grid-template-columns: repeat(8, 60px);
+    grid-template-rows: repeat(8, 60px);
+    border: 3px solid #333;
+  }
+  .square {
+    width: 60px;
+    height: 60px;
+    font-size: 36px;
+    line-height: 60px;
+    text-align: center;
+    cursor: pointer;
+    user-select: none;
+  }
+  .light {
+    background: #eeeed2;
+  }
+  .dark {
+    background: #769656;
+  }
+  .highlight-move {
+    background: #a9a9f5 !important;
+  }
+  .highlight-select {
+    outline: 3px solid #ff0000;
+  }
+</style>
+</head>
+<body>
+<div id="chessboard"></div>
+
+<script>
+  const board = document.getElementById('chessboard');
+
+  // Representação das peças usando Unicode
+  const piecesUnicode = {
+    'r': '♜', 'n': '♞', 'b': '♝', 'q': '♛', 'k': '♚', 'p': '♟',
+    'R': '♖', 'N': '♘', 'B': '♗', 'Q': '♕', 'K': '♔', 'P': '♙'
+  };
+
+  // Estado do tabuleiro: matriz 8x8
+  // Letras maiúsculas = peças brancas
+  // Letras minúsculas = peças pretas
+  let boardState = [
+    ['r','n','b','q','k','b','n','r'],
+    ['p','p','p','p','p','p','p','p'],
+    ['','','','','','','',''],
+    ['','','','','','','',''],
+    ['','','','','','','',''],
+    ['','','','','','','',''],
+    ['P','P','P','P','P','P','P','P'],
+    ['R','N','B','Q','K','B','N','R']
+  ];
+
+  let selected = null; // posição da peça selecionada [linha, coluna]
+  let validMoves = []; // movimentos possíveis da peça selecionada
+  let currentTurn = 'white'; // controla a vez do jogador
+
+  // Função para desenhar o tabuleiro
+  function drawBoard() {
+    board.innerHTML = '';
+    for (let r = 0; r < 8; r++) {
+      for (let c = 0; c < 8; c++) {
+        const square = document.createElement('div');
+        square.classList.add('square');
+        square.classList.add((r + c) % 2 === 0 ? 'light' : 'dark');
+        square.dataset.row = r;
+        square.dataset.col = c;
+
+        const piece = boardState[r][c];
+        if (piece) {
+          square.textContent = piecesUnicode[piece];
+          square.style.color = (piece === piece.toUpperCase()) ? '#fff' : '#000';
+          square.style.textShadow = (piece === piece.toUpperCase()) ? '0 0 2px black' : '0 0 2px white';
+        }
+
+        // Destacar quadrados de movimentos válidos
+        if (validMoves.some(m => m[0] === r && m[1] === c)) {
+          square.classList.add('highlight-move');
+        }
+
+        // Destacar peça selecionada
+        if (selected && selected[0] === r && selected[1] === c) {
+          square.classList.add('highlight-select');
+        }
+
+        square.addEventListener('click', () => squareClicked(r, c));
+        board.appendChild(square);
+      }
+    }
+  }
+
+  // Função para detectar movimentos válidos para a peça selecionada
+  function getValidMoves(r, c) {
+    const piece = boardState[r][c];
+    if (!piece) return [];
+    const moves = [];
+    const isWhite = piece === piece.toUpperCase();
+
+    // Função auxiliar para verificar se posição está dentro do tabuleiro
+    function insideBoard(x,y) {
+      return x >= 0 && x < 8 && y >= 0 && y < 8;
+    }
+
+    // Função para verificar se a casa está vazia ou tem peça adversária
+    function canMoveTo(x,y) {
+      if (!insideBoard(x,y)) return false;
+      const target = boardState[x][y];
+      if (!target) return true;
+      // Pode mover se for adversário
+      return isWhite ? (target.toLowerCase() === target) : (target.toUpperCase() === target);
+    }
+
+    // Movimentos das peças
+    switch (piece.toLowerCase()) {
+      case 'p': { // peão
+        const dir = isWhite ? -1 : 1;
+        // mover 1 casa pra frente
+        if (insideBoard(r+dir, c) && !boardState[r+dir][c]) moves.push([r+dir, c]);
+        // mover 2 casas se no começo
+        if ((isWhite && r === 6 || !isWhite && r === 1) && !boardState[r+dir][c] && !boardState[r+2*dir][c]) {
+          moves.push([r+2*dir, c]);
+        }
+        // capturas diagonais
+        for (let dc of [-1,1]) {
+          let x = r+dir;
+          let y = c+dc;
+          if (insideBoard(x,y)) {
+            const target = boardState[x][y];
+            if (target && (isWhite ? target.toLowerCase() === target : target.toUpperCase() === target)) {
+              moves.push([x,y]);
+            }
+          }
+        }
+        break;
+      }
+      case 'r': { // torre
+        // 4 direções em linha reta
+        const directions = [[1,0],[-1,0],[0,1],[0,-1]];
+        for (let [dx,dy] of directions) {
+          let x = r + dx;
+          let y = c + dy;
+          while (insideBoard(x,y)) {
+            if (!boardState[x][y]) {
+              moves.push([x,y]);
+            } else {
+              // pode capturar se for adversário
+              if (isWhite ? (boardState[x][y].toLowerCase() === boardState[x][y]) : (boardState[x][y].toUpperCase() === boardState[x][y])) {
+                moves.push([x,y]);
+              }
+              break;
+            }
+            x += dx;
+            y += dy;
+          }
+        }
+        break;
+      }
+      case 'n': { // cavalo
+        const knightMoves = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+        for (let [dx,dy] of knightMoves) {
+          let x = r + dx;
+          let y = c + dy;
+          if (insideBoard(x,y)) {
+            if (!boardState[x][y] || (isWhite ? boardState[x][y].toLowerCase() === boardState[x][y] : boardState[x][y].toUpperCase() === boardState[x][y])) {
+              moves.push([x,y]);
+            }
+          }
+        }
+        break;
+      }
+      case 'b': { // bispo
+        const directions = [[1,1],[1,-1],[-1,1],[-1,-1]];
+        for (let [dx,dy] of directions) {
+          let x = r + dx;
+          let y = c + dy;
+          while (insideBoard(x,y)) {
+            if (!boardState[x][y]) {
+              moves.push([x,y]);
+            } else {
+              if (isWhite ? (boardState[x][y].toLowerCase() === boardState[x][y]) : (boardState[x][y].toUpperCase() === boardState[x][y])) {
+                moves.push([x,y]);
+              }
+              break;
+            }
+            x += dx;
+            y += dy;
+          }
+        }
+        break;
+      }
+      case 'q': { // rainha = torre + bispo
+        const directions = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+        for (let [dx,dy] of directions) {
+          let x = r + dx;
+          let y = c + dy;
+          while (insideBoard(x,y)) {
+            if (!boardState[x][y]) {
+              moves.push([x,y]);
+            } else {
+              if (isWhite ? (boardState[x][y].toLowerCase() === boardState[x][y]) : (boardState[x][y].toUpperCase() === boardState[x][y])) {
+                moves.push([x,y]);
+              }
+              break;
+            }
+            x += dx;
+            y += dy;
+          }
+        }
+        break;
+      }
+      case 'k': { // rei
+        const directions = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+        for (let [dx,dy] of directions) {
+          let x = r + dx;
+          let y = c + dy;
+          if (insideBoard(x,y)) {
+            if (!boardState[x][y] || (isWhite ? boardState[x][y].toLowerCase() === boardState[x][y] : boardState[x][y].toUpperCase() === boardState[x][y])) {
+              moves.push([x,y]);
+            }
+          }
+        }
+        break;
+      }
+    }
+    return moves;
+  }
+
+  // Quando um quadrado é clicado
+  function squareClicked(r, c) {
+    const clickedPiece = boardState[r][c];
+    const isWhitePiece = clickedPiece && clickedPiece === clickedPiece.toUpperCase();
+
+    if (selected) {
+      // Se clicar em um movimento válido, move a peça
+      if (validMoves.some(m => m[0] === r && m[1] === c)) {
+        movePiece(selected, [r,c]);
+        selected = null;
+        validMoves = [];
+        drawBoard();
+        // Alterna o turno
+        currentTurn = currentTurn === 'white' ? 'black' : 'white';
+        return;
+      }
+
+      // Se clicar em outra peça da vez atual, seleciona essa peça
+      if (clickedPiece && ((currentTurn === 'white' && isWhitePiece) || (currentTurn === 'black' && !isWhitePiece))) {
+        selected = [r,c];
+        validMoves = getValidMoves(r,c);
+        drawBoard();
+        return;
+      }
+
+      // Senão, limpa seleção
+      selected = null;
+      validMoves = [];
+      drawBoard();
+    } else {
+      // Selecionar peça da vez
+      if (clickedPiece && ((currentTurn === 'white' && isWhitePiece) || (currentTurn === 'black' && !isWhitePiece))) {
+        selected = [r,c];
+        validMoves = getValidMoves(r,c);
+        drawBoard();
+      }
+    }
+  }
+
+  // Função para mover a peça
+  function movePiece(from, to) {
+    const [fr, fc] = from;
+    const [tr, tc] = to;
+    boardState[tr][tc] = boardState[fr][fc];
+    boardState[fr][fc] = '';
+  }
+
+  drawBoard();
+</script>
+</body>
+</html>
